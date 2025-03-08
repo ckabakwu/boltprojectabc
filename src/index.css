@@ -1,0 +1,173 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import './styles/responsive.css';
+@import 'react-calendar/dist/Calendar.css';
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply text-gray-800 font-sans antialiased;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold;
+  }
+
+  /* Mobile-first text sizing */
+  h1 { @apply text-2xl md:text-3xl lg:text-4xl; }
+  h2 { @apply text-xl md:text-2xl lg:text-3xl; }
+  h3 { @apply text-lg md:text-xl lg:text-2xl; }
+  
+  /* Base text size for better readability on mobile */
+  p, li, a { @apply text-base md:text-lg; }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 md:px-6 py-2 md:py-3 rounded-lg font-medium transition-all duration-300 inline-flex items-center justify-center;
+  }
+  
+  .btn-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg;
+  }
+  
+  .btn-secondary {
+    @apply bg-white text-blue-600 border border-blue-600 hover:bg-blue-50;
+  }
+  
+  .btn-lg {
+    @apply px-6 md:px-8 py-3 md:py-4 text-base md:text-lg;
+  }
+  
+  .input-field {
+    @apply w-full px-3 md:px-4 py-2 md:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-base md:text-lg;
+  }
+  
+  .select-field {
+    @apply w-full px-3 md:px-4 py-2 md:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 bg-white text-base md:text-lg;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-md p-4 md:p-6 transition-all duration-300;
+  }
+  
+  .card-hover {
+    @apply hover:shadow-lg hover:-translate-y-1;
+  }
+  
+  .section {
+    @apply py-8 md:py-16 px-4 md:px-6;
+  }
+  
+  .container-narrow {
+    @apply max-w-5xl mx-auto px-4 md:px-6;
+  }
+
+  /* Page spacing utilities */
+  .page-header-spacing {
+    @apply pt-24 md:pt-28;
+  }
+
+  /* Mobile-optimized spacing utilities */
+  .mobile-container {
+    @apply px-4 md:px-6 mx-auto;
+  }
+
+  .mobile-section {
+    @apply py-6 md:py-12;
+  }
+
+  .mobile-text {
+    @apply text-sm md:text-base;
+  }
+
+  .mobile-heading {
+    @apply text-xl md:text-2xl lg:text-3xl font-bold;
+  }
+
+  .mobile-subheading {
+    @apply text-lg md:text-xl lg:text-2xl font-semibold;
+  }
+
+  /* Mobile-optimized grid layouts */
+  .mobile-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6;
+  }
+
+  /* Mobile-optimized padding and margins */
+  .mobile-spacing {
+    @apply p-4 md:p-6 lg:p-8;
+  }
+
+  .mobile-margin {
+    @apply my-4 md:my-6 lg:my-8;
+  }
+}
+
+/* Calendar customization */
+.react-calendar {
+  @apply w-full border-0 shadow-none font-sans;
+}
+
+.react-calendar__tile {
+  @apply relative p-2 text-sm;
+}
+
+.react-calendar__tile--now {
+  @apply bg-blue-50;
+}
+
+.react-calendar__tile--active {
+  @apply bg-blue-600 text-white;
+}
+
+.react-calendar__tile--hasContent {
+  @apply font-medium;
+}
+
+.react-calendar__navigation button {
+  @apply text-gray-700 hover:bg-gray-100 rounded-lg;
+}
+
+.react-calendar__month-view__weekdays {
+  @apply text-gray-500 font-medium;
+}
+
+.react-calendar__month-view__days__day--weekend {
+  @apply text-gray-700;
+}
+
+.react-calendar__month-view__days__day--neighboringMonth {
+  @apply text-gray-400;
+}
+
+@keyframes blob {
+  0% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
