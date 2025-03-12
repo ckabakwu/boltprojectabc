@@ -1,32 +1,75 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
+import { useAuth } from '../lib/auth'; // Add this import
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase'; // Add this import
 
 const RegisterPage = () => {
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState('');
+  const { signUp } = useAuth(); // Use the auth hook
+  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    password: '',
+    phone: '',
+    agreeToTerms: false
+  });
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(''); // Add error state
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      // For demo purposes, just redirect to dashboard
-      window.location.href = '/customer-dashboard';
-    }, 1500);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.agreeToTerms) {
+      setError('Please agree to the terms and conditions');
+      toast.error('Please agree to the terms and conditions');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      await signUp(
+        formData.email,
+        formData.password,
+        'customer',
+        `${formData.firstName} ${formData.lastName}`
+      );
+      
+      // Clear form
+      setFormData({
+        firstName: '',
+        lastName: '',
+        email: '',
+        password: '',
+        phone: '',
+        agreeToTerms: false
+      });
+    } catch (err: any) {
+      console.error('Registration error:', err);
+      const errorMessage = err?.message || 'Registration failed';
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Update form inputs to use formData
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
@@ -59,11 +102,13 @@ const RegisterPage = () => {
                     <input
                       type="text"
                       id="firstName"
+                      name="firstName"
                       className="input-field"
                       placeholder="John"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
+                      value={formData.firstName}
+                      onChange={handleInputChange}
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   
@@ -74,11 +119,13 @@ const RegisterPage = () => {
                     <input
                       type="text"
                       id="lastName"
+                      name="lastName"
                       className="input-field"
                       placeholder="Smith"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
+                      value={formData.lastName}
+                      onChange={handleInputChange}
                       required
+                      disabled={isLoading}
                     />
                   </div>
                 </div>
@@ -90,11 +137,13 @@ const RegisterPage = () => {
                   <input
                     type="email"
                     id="email"
+                    name="email"
                     className="input-field"
                     placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={formData.email}
+                    onChange={handleInputChange}
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 
@@ -105,11 +154,13 @@ const RegisterPage = () => {
                   <input
                     type="tel"
                     id="phone"
+                    name="phone"
                     className="input-field"
                     placeholder="(123) 456-7890"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    value={formData.phone}
+                    onChange={handleInputChange}
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 
@@ -120,24 +171,49 @@ const RegisterPage = () => {
                   <input
                     type="password"
                     id="password"
+                    name="password"
                     className="input-field"
                     placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={formData.password}
+                    onChange={handleInputChange}
                     required
                     minLength={8}
+                    disabled={isLoading}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Password must be at least 8 characters long
                   </p>
                 </div>
+
+                <div className="mb-4">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="agreeToTerms"
+                      checked={formData.agreeToTerms}
+                      onChange={handleInputChange}
+                      className="mr-2"
+                      disabled={isLoading}
+                    />
+                    <span className="text-sm text-gray-600">
+                      I agree to the Terms and Privacy Policy
+                    </span>
+                  </label>
+                </div>
                 
                 <button 
                   type="submit" 
-                  className="btn btn-primary w-full"
+                  className="btn btn-primary w-full flex items-center justify-center"
                   disabled={isLoading}
                 >
-                  {isLoading ? 'Creating account...' : 'Create Account'}
+                  {isLoading ? (
+                    <>
+                      <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Creating account...
+                    </>
+                  ) : (
+                    'Create Account'
+                  )}
                 </button>
               </form>
               

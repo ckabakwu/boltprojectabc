@@ -1,20 +1,22 @@
 import { supabase } from './supabase';
-import { createPaymentIntent, processPayment } from './stripe';
 import { emailService } from './emailService';
 import { bookingTemplates } from './emailTemplates';
 import mixpanel from './analytics';
 
 export interface BookingDetails {
-  service: string;
-  date: string;
-  time: string;
+  user_id: string;
+  service_type: string;
+  scheduled_date: string;
+  scheduled_time: string;
   address: string;
-  zipCode: string;
-  bedrooms: number;
-  bathrooms: number;
-  extras: string[];
-  specialInstructions?: string;
+  zip_code: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  extras?: string[];
+  special_instructions?: string;
   amount: number;
+  square_footage?: string;
+  status?: 'pending' | 'confirmed' | 'completed' | 'cancelled';
 }
 
 class BookingService {
@@ -29,145 +31,137 @@ class BookingService {
     return BookingService.instance;
   }
 
-  public async checkAvailability(date: string, time: string, zipCode: string): Promise<boolean> {
-    try {
-      // In development, always return true
-      if (import.meta.env.DEV) {
-        return true;
-      }
+  private async ensureUserProfile(userId: string, email: string) {
+    // Check if profile exists
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
 
-      // Check provider availability
-      const { data: providers, error: providersError } = await supabase
-        .from('service_providers')
-        .select('id')
-        .eq('available', true)
-        .eq('active', true)
-        .in('service_areas.zipcode', [zipCode]);
+    // If profile doesn't exist, create it
+    if (!profile) {
+      const { error } = await supabase
+        .from('profiles')
+        .insert([
+          {
+            id: userId,
+            email: email,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ]);
 
-      if (providersError) throw providersError;
-
-      // Check existing bookings
-      const { data: bookings, error: bookingsError } = await supabase
-        .from('bookings')
-        .select('id')
-        .eq('date', date)
-        .eq('time', time)
-        .in('provider_id', providers.map(p => p.id));
-
-      if (bookingsError) throw bookingsError;
-
-      // Return true if there are available providers
-      return providers.length > bookings.length;
-    } catch (error) {
-      console.warn('Error checking availability:', error);
-      // In case of error, return true to allow booking attempt
-      return true;
+      if (error) throw error;
     }
   }
 
-  public async createBooking(details: BookingDetails, userId: string): Promise<string> {
+  public async getUserBookings(userId: string) {
+    const { data: bookings, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('user_id', userId)
+      .order('scheduled_date', { ascending: true });
+
+    if (error) throw error;
+    return bookings;
+  }
+
+  public async getUpcomingBookings(userId: string) {
+    const { data: bookings, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('scheduled_date', new Date().toISOString().split('T')[0])
+      .order('scheduled_date', { ascending: true });
+
+    if (error) throw error;
+    return bookings;
+  }
+
+  public async createBooking(bookingDetails: BookingDetails) {
     try {
-      // Start transaction
-      const { data: booking, error: bookingError } = await supabase
+      // First ensure user profile exists
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      await this.ensureUserProfile(user.id, user.email || '');
+
+      // Then create the booking
+      const { data, error } = await supabase
         .from('bookings')
         .insert([
           {
-            customer_id: userId,
-            service_type: details.service,
-            scheduled_at: `${details.date} ${details.time}`,
-            address: details.address,
-            total_amount: details.amount,
-            status: 'pending',
-            notes: details.specialInstructions
+            user_id: bookingDetails.user_id,
+            service_type: bookingDetails.service_type,
+            scheduled_date: bookingDetails.scheduled_date,
+            scheduled_time: bookingDetails.scheduled_time,
+            address: bookingDetails.address,
+            zip_code: bookingDetails.zip_code,
+            bedrooms: bookingDetails.bedrooms,
+            bathrooms: bookingDetails.bathrooms,
+            extras: bookingDetails.extras,
+            special_instructions: bookingDetails.special_instructions,
+            amount: bookingDetails.amount,
+            square_footage: bookingDetails.square_footage,
+            status: 'pending'
           }
         ])
         .select()
         .single();
 
-      if (bookingError) throw bookingError;
+      if (error) throw error;
 
-      // Create payment intent
-      const { stripe, sessionId } = await createPaymentIntent(details.amount, booking.id);
-
-      // Send confirmation email
-      await this.sendBookingConfirmation(booking.id, details);
-
-      // Track booking creation
       mixpanel.track('Booking Created', {
-        bookingId: booking.id,
-        service: details.service,
-        amount: details.amount
+        bookingId: data.id,
+        serviceType: bookingDetails.service_type,
+        amount: bookingDetails.amount
       });
 
-      return sessionId;
+      return data;
     } catch (error) {
       console.error('Error creating booking:', error);
       throw error;
     }
   }
 
-  public async confirmBooking(bookingId: string, sessionId: string): Promise<void> {
-    try {
-      // Process payment
-      const paymentIntent = await processPayment(sessionId);
-      
-      if (paymentIntent.status !== 'succeeded') {
-        throw new Error('Payment failed');
-      }
+  public async cancelBooking(bookingId: string) {
+    const { data, error } = await supabase
+      .from('bookings')
+      .update({ status: 'cancelled' })
+      .eq('id', bookingId)
+      .select()
+      .single();
 
-      // Update booking status
-      const { error: updateError } = await supabase
-        .from('bookings')
-        .update({ status: 'confirmed', payment_id: paymentIntent.id })
-        .eq('id', bookingId);
-
-      if (updateError) throw updateError;
-
-      // Send confirmation email
-      const { data: booking, error: bookingError } = await supabase
-        .from('bookings')
-        .select('*, customers(*)')
-        .eq('id', bookingId)
-        .single();
-
-      if (bookingError) throw bookingError;
-
-      await this.sendBookingConfirmation(bookingId, booking);
-
-      // Track successful booking
-      mixpanel.track('Booking Confirmed', {
-        bookingId,
-        paymentId: paymentIntent.id
-      });
-    } catch (error) {
-      console.error('Error confirming booking:', error);
-      throw error;
-    }
+    if (error) throw error;
+    return data;
   }
 
-  private async sendBookingConfirmation(bookingId: string, details: any): Promise<void> {
-    try {
-      const template = bookingTemplates.confirmation({
-        bookingId,
-        service: details.service,
-        date: details.date,
-        time: details.time,
-        address: details.address,
-        amount: `$${details.amount}`
-      });
+  public async getBookingById(bookingId: string) {
+    console.log('Getting booking with ID:', bookingId);
+    
+    const { data: booking, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', bookingId)
+      .single();
 
-      await emailService.sendEmail({
-        to: details.customers.email,
-        template,
-        metadata: {
-          type: 'booking_confirmation',
-          bookingId
-        }
-      });
-    } catch (error) {
-      console.error('Error sending booking confirmation:', error);
-      // Don't throw error to prevent booking process from failing
+    if (error) {
+      console.error('Error fetching booking:', error);
+      throw error;
     }
+
+    if (!booking) {
+      throw new Error('Booking not found');
+    }
+
+    // Verify user has access to this booking
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id !== booking.user_id) {
+      throw new Error('Unauthorized access to booking');
+    }
+
+    return booking;
   }
 }
 

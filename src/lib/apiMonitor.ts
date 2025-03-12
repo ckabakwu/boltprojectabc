@@ -101,7 +101,8 @@ class APIMonitor {
     }
   }
 
-  private async checkAuth() {
+  // Fix: Change method declaration to use arrow function
+  private checkAuth = async (): Promise<void> => {
     const start = Date.now();
     try {
       const { data: { session } } = await supabase.auth.getSession();

@@ -11,9 +11,12 @@ interface LoginFormProps {
 
 const LoginForm: React.FC<LoginFormProps> = ({ role = 'customer' }) => {
   const { signIn, error, clearError } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    rememberMe: false
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,12 +25,21 @@ const LoginForm: React.FC<LoginFormProps> = ({ role = 'customer' }) => {
     clearError();
 
     try {
-      await signIn(email, password, rememberMe);
+      await signIn(formData.email, formData.password, formData.rememberMe);
+      // Navigation is handled by auth provider
     } catch (err) {
       console.error('Login error:', err);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
   };
 
   return (

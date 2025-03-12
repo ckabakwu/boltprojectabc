@@ -11,6 +11,7 @@ interface RegistrationFormProps {
 
 const RegistrationForm: React.FC<RegistrationFormProps> = ({ role = 'customer' }) => {
   const { signUp, error, clearError } = useAuth();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -22,6 +23,37 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ role = 'customer' }
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+    
+    setIsSubmitting(true);
+    clearError();
+
+    try {
+      await signUp(
+        formData.email,
+        formData.password,
+        role,
+        `${formData.firstName} ${formData.lastName}`
+      );
+
+      // Track successful registration
+      mixpanel.track('User Registration', {
+        role,
+        timestamp: new Date().toISOString()
+      });
+
+      // Redirect will be handled by auth provider
+    } catch (err) {
+      setValidationErrors({
+        submit: err.message || 'Registration failed. Please try again.'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
@@ -67,27 +99,6 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ role = 'customer' }
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formattedNumber = formatPhoneNumber(e.target.value);
     setFormData(prev => ({ ...prev, phone: formattedNumber }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-
-    setIsSubmitting(true);
-    clearError();
-
-    try {
-      await signUp(
-        formData.email,
-        formData.password,
-        role,
-        `${formData.firstName} ${formData.lastName}`
-      );
-    } catch (err) {
-      console.error('Registration error:', err);
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   return (

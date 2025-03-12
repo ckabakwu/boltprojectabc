@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, X, Sparkles } from 'lucide-react';
+import { Menu, X, Sparkles, User } from 'lucide-react';
+import { useAuth } from '../lib/auth';
 
 const Navbar = () => {
+  const { user, signOut, isAdmin, isProvider } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isHomePage, setIsHomePage] = useState(true);
+
+  // Get dashboard link based on user role
+  const getDashboardLink = () => {
+    if (isAdmin) return '/admin/dashboard';
+    if (isProvider) return '/pro/dashboard';
+    return '/customer-dashboard';
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -55,6 +64,16 @@ const Navbar = () => {
         
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center space-x-8">
+          {user && (
+            <Link 
+              to={getDashboardLink()} 
+              className={`font-semibold text-base hover:text-blue-600 transition-colors ${
+                (isScrolled || !isHomePage) ? 'text-gray-700' : 'text-white hover:text-white/80'
+              }`}
+            >
+              Dashboard
+            </Link>
+          )}
           <Link 
             to="/services" 
             className={`font-semibold text-base hover:text-blue-600 transition-colors ${
@@ -79,22 +98,43 @@ const Navbar = () => {
           >
             Service Areas
           </Link>
-          <Link 
-            to="/login" 
-            className={`font-semibold text-base hover:text-blue-600 transition-colors ${
-              (isScrolled || !isHomePage) ? 'text-gray-700' : 'text-white hover:text-white/80'
-            }`}
-          >
-            Login
-          </Link>
-          <Link 
-            to="/register" 
-            className={`font-semibold text-base hover:text-blue-600 transition-colors ${
-              (isScrolled || !isHomePage) ? 'text-gray-700' : 'text-white hover:text-white/80'
-            }`}
-          >
-            Sign Up
-          </Link>
+          
+          {user ? (
+            <div className="flex items-center space-x-4">
+              <span className={`font-semibold text-base ${
+                (isScrolled || !isHomePage) ? 'text-gray-700' : 'text-white'
+              }`}>
+                {user.full_name}
+              </span>
+              <button
+                onClick={() => signOut()}
+                className={`font-semibold text-base hover:text-blue-600 transition-colors ${
+                  (isScrolled || !isHomePage) ? 'text-gray-700' : 'text-white hover:text-white/80'
+                }`}
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <>
+              <Link 
+                to="/login" 
+                className={`font-semibold text-base hover:text-blue-600 transition-colors ${
+                  (isScrolled || !isHomePage) ? 'text-gray-700' : 'text-white hover:text-white/80'
+                }`}
+              >
+                Login
+              </Link>
+              <Link 
+                to="/register" 
+                className={`font-semibold text-base hover:text-blue-600 transition-colors ${
+                  (isScrolled || !isHomePage) ? 'text-gray-700' : 'text-white hover:text-white/80'
+                }`}
+              >
+                Sign Up
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Empty div to maintain layout on mobile */}
@@ -105,6 +145,15 @@ const Navbar = () => {
       {isOpen && (
         <div className="md:hidden bg-white w-full py-6 px-4 shadow-lg absolute top-full left-0">
           <div className="flex flex-col space-y-6">
+            {user && (
+              <Link 
+                to={getDashboardLink()}
+                className="text-gray-800 hover:text-blue-600 font-semibold text-lg py-2 border-b border-gray-100"
+                onClick={() => setIsOpen(false)}
+              >
+                Dashboard
+              </Link>
+            )}
             <Link 
               to="/services" 
               className="text-gray-800 hover:text-blue-600 font-semibold text-lg py-2 border-b border-gray-100"
@@ -126,20 +175,40 @@ const Navbar = () => {
             >
               Service Areas
             </Link>
-            <Link 
-              to="/login" 
-              className="text-gray-800 hover:text-blue-600 font-semibold text-lg py-2 border-b border-gray-100"
-              onClick={() => setIsOpen(false)}
-            >
-              Login
-            </Link>
-            <Link 
-              to="/register" 
-              className="text-gray-800 hover:text-blue-600 font-semibold text-lg py-2"
-              onClick={() => setIsOpen(false)}
-            >
-              Sign Up
-            </Link>
+            
+            {user ? (
+              <>
+                <div className="text-gray-800 font-semibold text-lg py-2 border-b border-gray-100">
+                  {user.full_name}
+                </div>
+                <button
+                  onClick={() => {
+                    signOut();
+                    setIsOpen(false);
+                  }}
+                  className="text-gray-800 hover:text-blue-600 font-semibold text-lg py-2"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link 
+                  to="/login" 
+                  className="text-gray-800 hover:text-blue-600 font-semibold text-lg py-2 border-b border-gray-100"
+                  onClick={() => setIsOpen(false)}
+                >
+                  Login
+                </Link>
+                <Link 
+                  to="/register" 
+                  className="text-gray-800 hover:text-blue-600 font-semibold text-lg py-2"
+                  onClick={() => setIsOpen(false)}
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

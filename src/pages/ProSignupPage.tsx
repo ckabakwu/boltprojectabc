@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import { DollarSign, Clock, Calendar, Star, Shield, Users, Sparkles } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
 
 const benefits = [
   {
@@ -58,11 +60,71 @@ const ProSignupPage = () => {
     
     try {
       if (isLoginMode) {
-        // Handle login
-        // After successful login, redirect to pro dashboard
+        // Handle pro login
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+
+        // Check if user is a pro
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('role, approved')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError) throw profileError;
+
+        if (profileData.role !== 'pro') {
+          throw new Error('This account is not registered as a professional cleaner');
+        }
+
+        // Check if pro is approved
+        if (!profileData.approved) {
+          toast.success('Login successful. Your application is pending review.');
+          navigate('/pro-application/status');
+          return;
+        }
+
+        toast.success('Login successful!');
         navigate('/pro-dashboard');
       } else {
-        // For new sign ups, redirect to pro application
+        // Handle pro signup
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              role: 'pro',
+              full_name: `${firstName} ${lastName}`,
+              phone,
+            }
+          }
+        });
+
+        if (error) throw error;
+
+        // Create profile for pro
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert([
+            {
+              id: data.user?.id,
+              full_name: `${firstName} ${lastName}`,
+              email,
+              phone,
+              zip_code: zipCode,
+              role: 'pro',
+              approved: false,
+              experience,
+            }
+          ]);
+
+        if (profileError) throw profileError;
+
+        // Navigate to pro application with form data
         navigate('/pro-application', {
           state: {
             formData: {
@@ -71,13 +133,18 @@ const ProSignupPage = () => {
               lastName,
               phone,
               zipCode,
-              experience
+              experience,
+              userId: data.user?.id
             }
           }
         });
+
+        toast.success('Account created! Please complete your application.');
       }
-    } catch (err) {
-      setError('An error occurred. Please try again.');
+    } catch (err: any) {
+      console.error('Error:', err);
+      setError(err.message || 'An error occurred. Please try again.');
+      toast.error(err.message || 'An error occurred');
     } finally {
       setIsLoading(false);
     }

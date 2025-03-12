@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Search,
@@ -9,85 +9,129 @@ import {
   User,
   DollarSign,
   Edit,
+  Eye,
   Trash2,
   ChevronDown,
   CheckCircle,
   XCircle,
   AlertCircle,
-  MoreVertical
+  MoreVertical,
+  Home,
+  ArrowLeft,
+  Mail
 } from 'lucide-react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
+import toast from 'react-hot-toast';
 
-// Mock data for bookings
-const bookings = [
-  {
-    id: 1,
-    customer: {
-      name: 'John Smith',
-      email: 'john.smith@example.com',
-      phone: '(555) 123-4567'
-    },
-    pro: {
-      name: 'Maria Rodriguez',
-      rating: 4.9
-    },
-    service: 'Standard Cleaning',
-    date: '2025-06-15',
-    time: '10:00 AM',
-    address: '123 Main St, Apt 4B, New York, NY 10001',
-    status: 'confirmed',
-    amount: 120,
-    duration: '3 hours',
-    notes: 'Please pay extra attention to kitchen and bathrooms'
-  },
-  {
-    id: 2,
-    customer: {
-      name: 'Sarah Johnson',
-      email: 'sarah.j@example.com',
-      phone: '(555) 234-5678'
-    },
-    pro: {
-      name: 'David Wilson',
-      rating: 4.8
-    },
-    service: 'Deep Cleaning',
-    date: '2025-06-15',
-    time: '2:00 PM',
-    address: '456 Oak Ave, Suite 7, Brooklyn, NY 11201',
-    status: 'pending',
-    amount: 180,
-    duration: '4 hours',
-    notes: 'First time customer'
-  },
-  {
-    id: 3,
-    customer: {
-      name: 'Michael Chen',
-      email: 'mchen@example.com',
-      phone: '(555) 345-6789'
-    },
-    pro: {
-      name: 'Lisa Brown',
-      rating: 4.7
-    },
-    service: 'Move-In Cleaning',
-    date: '2025-06-16',
-    time: '9:00 AM',
-    address: '789 Pine St, Unit 12, Queens, NY 11101',
-    status: 'in_progress',
-    amount: 220,
-    duration: '5 hours',
-    notes: 'New apartment, needs thorough cleaning'
-  }
-];
+interface Booking {
+  id: string;
+  user_id: string;
+  service_type: string;
+  scheduled_date: string;
+  scheduled_time: string;
+  address: string;
+  zip_code: string;
+  bedrooms: number;
+  bathrooms: number;
+  square_footage: string;
+  extras: string[];
+  special_instructions: string;
+  amount: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  profiles: {
+    email: string;
+    full_name: string | null;
+    role: string;
+  };
+}
 
 const AdminBookingsPage = () => {
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedService, setSelectedService] = useState('all');
   const [selectedDateRange, setSelectedDateRange] = useState('all');
-  const [showDetails, setShowDetails] = useState<number | null>(null);
+  const [showDetails, setShowDetails] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchBookings();
+  }, [selectedStatus, selectedService, selectedDateRange]);
+
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+      
+      // First, check the current user and their role
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('Current user:', user);
+
+      const { data: userProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user?.id)
+        .single();
+      
+      console.log('User profile:', userProfile);
+      if (profileError) console.error('Profile error:', profileError);
+
+      // Then fetch bookings
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          profiles:user_id (
+            email,
+            full_name,
+            role
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching bookings:', error);
+        throw error;
+      }
+
+      console.log('Fetched bookings:', data);
+      setBookings(data || []);
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+      toast.error('Failed to load bookings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateBookingStatus = async (bookingId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status: newStatus })
+        .eq('id', bookingId);
+
+      if (error) throw error;
+      
+      toast.success(`Booking ${newStatus} successfully`);
+      fetchBookings(); // Refresh the list
+    } catch (error) {
+      console.error('Error updating booking:', error);
+      toast.error('Failed to update booking status');
+    }
+  };
+
+  const filteredBookings = bookings.filter(booking => {
+    const searchString = searchTerm.toLowerCase();
+    return (
+      booking.profiles?.full_name?.toLowerCase().includes(searchString) ||
+      booking.profiles?.email?.toLowerCase().includes(searchString) ||
+      booking.address?.toLowerCase().includes(searchString)
+    );
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -106,25 +150,23 @@ const AdminBookingsPage = () => {
     }
   };
 
-  const filteredBookings = bookings.filter(booking => {
-    const matchesSearch = 
-      booking.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.pro.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.address.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = selectedStatus === 'all' || booking.status === selectedStatus;
-    const matchesService = selectedService === 'all' || booking.service.toLowerCase().includes(selectedService.toLowerCase());
-    
-    return matchesSearch && matchesStatus && matchesService;
-  });
+  const formatDateTime = (date: string, time: string) => {
+    return `${new Date(date).toLocaleDateString()} ${time}`;
+  };
+
+  const formatAmount = (amount: string) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(parseFloat(amount));
+  };
 
   return (
-    <div>
+    <div className="px-4 sm:px-6 lg:px-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Bookings Management</h1>
         <p className="mt-1 text-sm text-gray-500">
-          View and manage all cleaning service bookings.
+          Manage and monitor all cleaning service bookings
         </p>
       </div>
 
@@ -138,8 +180,8 @@ const AdminBookingsPage = () => {
               </div>
               <input
                 type="text"
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                placeholder="Search bookings by customer, pro, or address..."
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                placeholder="Search bookings..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -169,8 +211,8 @@ const AdminBookingsPage = () => {
                         onChange={(e) => setSelectedStatus(e.target.value)}
                       >
                         <option value="all">All Statuses</option>
-                        <option value="confirmed">Confirmed</option>
                         <option value="pending">Pending</option>
+                        <option value="confirmed">Confirmed</option>
                         <option value="in_progress">In Progress</option>
                         <option value="completed">Completed</option>
                         <option value="cancelled">Cancelled</option>
@@ -185,11 +227,9 @@ const AdminBookingsPage = () => {
                         onChange={(e) => setSelectedService(e.target.value)}
                       >
                         <option value="all">All Services</option>
-                        <option value="standard">Standard Cleaning</option>
-                        <option value="deep">Deep Cleaning</option>
-                        <option value="move">Move In/Out Cleaning</option>
-                        <option value="airbnb">Airbnb Cleaning</option>
+                        <option value="home">Home Cleaning</option>
                         <option value="office">Office Cleaning</option>
+                        <option value="airbnb">Airbnb Cleaning</option>
                       </select>
                     </div>
                     
@@ -202,36 +242,21 @@ const AdminBookingsPage = () => {
                       >
                         <option value="all">All Time</option>
                         <option value="today">Today</option>
-                        <option value="tomorrow">Tomorrow</option>
                         <option value="week">This Week</option>
                         <option value="month">This Month</option>
                       </select>
-                    </div>
-                    
-                    <div className="px-4 py-2 flex justify-end">
-                      <button
-                        type="button"
-                        className="text-sm text-gray-700 hover:text-gray-900"
-                        onClick={() => {
-                          setSelectedStatus('all');
-                          setSelectedService('all');
-                          setSelectedDateRange('all');
-                        }}
-                      >
-                        Reset Filters
-                      </button>
                     </div>
                   </div>
                 </div>
               )}
             </div>
             
-            <button
-              type="button"
+            <Link
+              to="/admin/bookings/new"
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               Create Booking
-            </button>
+            </Link>
           </div>
         </div>
       </div>
@@ -243,13 +268,13 @@ const AdminBookingsPage = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Booking Details
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Customer
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Pro
+                  Service Details
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Date & Time
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
@@ -263,158 +288,379 @@ const AdminBookingsPage = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredBookings.map((booking) => (
-                <React.Fragment key={booking.id}>
-                  <tr className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0">
-                          <Calendar className="h-6 w-6 text-gray-400" />
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {booking.service}
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-4 text-center">
+                    <div className="flex justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredBookings.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                    No bookings found
+                  </td>
+                </tr>
+              ) : (
+                filteredBookings.map((booking) => (
+                  <React.Fragment key={booking.id}>
+                    <tr className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0">
+                            <User className="h-6 w-6 text-gray-400" />
                           </div>
-                          <div className="text-sm text-gray-500">
-                            {new Date(booking.date).toLocaleDateString()} at {booking.time}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">
-                        {booking.customer.name}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {booking.customer.email}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">
-                        {booking.pro.name}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        Rating: {booking.pro.rating}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(booking.status)}`}>
-                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      ${booking.amount}
-                    </td>
-                    <td className="px-6 py-4 text-right text-sm font-medium">
-                      <button
-                        type="button"
-                        className="text-gray-400 hover:text-gray-500"
-                        onClick={() => setShowDetails(showDetails === booking.id ? null : booking.id)}
-                      >
-                        <MoreVertical className="h-5 w-5" />
-                      </button>
-                    </td>
-                  </tr>
-                  
-                  {/* Expanded Details */}
-                  {showDetails === booking.id && (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-4 bg-gray-50">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-900 mb-2">Booking Details</h4>
-                            <div className="space-y-2 text-sm text-gray-500">
-                              <div className="flex items-start">
-                                <MapPin className="h-5 w-5 text-gray-400 mr-2" />
-                                <span>{booking.address}</span>
-                              </div>
-                              <div className="flex items-center">
-                                <Clock className="h-5 w-5 text-gray-400 mr-2" />
-                                <span>Duration: {booking.duration}</span>
-                              </div>
-                              <div className="flex items-start">
-                                <AlertCircle className="h-5 w-5 text-gray-400 mr-2" />
-                                <span>Notes: {booking.notes}</span>
-                              </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">
+                              {booking.profiles?.full_name || 'N/A'}
                             </div>
-                          </div>
-                          
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-900 mb-2">Actions</h4>
-                            <div className="space-x-3">
-                              <button
-                                type="button"
-                                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                              >
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                              >
-                                <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
-                                Confirm
-                              </button>
-                              <button
-                                type="button"
-                                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                              >
-                                <XCircle className="h-4 w-4 mr-2 text-red-500" />
-                                Cancel
-                              </button>
+                            <div className="text-sm text-gray-500">
+                              {booking.profiles?.email}
                             </div>
                           </div>
                         </div>
                       </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900 capitalize">{booking.service_type}</div>
+                        <div className="text-sm text-gray-500">
+                          {booking.bedrooms} bed, {booking.bathrooms} bath
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900">
+                          {formatDateTime(booking.scheduled_date, booking.scheduled_time)}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Created: {new Date(booking.created_at).toLocaleDateString()}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(booking.status)}`}>
+                          {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {formatAmount(booking.amount)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end space-x-2">
+                          <Link
+                            to={`/admin/bookings/${booking.id}`}
+                            className="text-blue-600 hover:text-blue-900 flex items-center"
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </Link>
+                          <Link
+                            to={`/admin/bookings/${booking.id}/edit`}
+                            className="text-gray-600 hover:text-gray-900 flex items-center"
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </Link>
+                        </div>
+                      </td>
                     </tr>
-                  )}
-                </React.Fragment>
-              ))}
+                    
+                    {showDetails === booking.id && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 bg-gray-50">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-900 mb-2">Location Details</h4>
+                              <div className="space-y-2 text-sm text-gray-500">
+                                <div className="flex items-start">
+                                  <MapPin className="h-5 w-5 text-gray-400 mr-2" />
+                                  <span>{booking.address}</span>
+                                </div>
+                                <div className="flex items-center">
+                                  <span className="text-gray-600">ZIP Code: {booking.zip_code}</span>
+                                </div>
+                                <div className="flex items-center">
+                                  <span>Square Footage: {booking.square_footage}</span>
+                                </div>
+                              </div>
+                              
+                              {booking.extras && booking.extras.length > 0 && (
+                                <div className="mt-4">
+                                  <h4 className="text-sm font-medium text-gray-900 mb-2">Extra Services</h4>
+                                  <ul className="list-disc list-inside text-sm text-gray-500">
+                                    {booking.extras.map((extra, index) => (
+                                      <li key={index} className="capitalize">{extra}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              
+                              {booking.special_instructions && (
+                                <div className="mt-4">
+                                  <h4 className="text-sm font-medium text-gray-900 mb-2">Special Instructions</h4>
+                                  <p className="text-sm text-gray-500">{booking.special_instructions}</p>
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-900 mb-2">Actions</h4>
+                              <div className="space-y-2">
+                                {booking.status === 'pending' && (
+                                  <>
+                                    <button
+                                      onClick={() => updateBookingStatus(booking.id, 'confirmed')}
+                                      className="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+                                    >
+                                      <CheckCircle className="h-4 w-4 mr-2" />
+                                      Confirm Booking
+                                    </button>
+                                    <button
+                                      onClick={() => updateBookingStatus(booking.id, 'cancelled')}
+                                      className="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+                                    >
+                                      <XCircle className="h-4 w-4 mr-2" />
+                                      Cancel Booking
+                                    </button>
+                                  </>
+                                )}
+                                <Link
+                                  to={`/admin/bookings/${booking.id}/edit`}
+                                  className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                                >
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit Booking
+                                </Link>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))
+              )}
             </tbody>
           </table>
         </div>
-        
-        {/* Pagination */}
-        <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+      </div>
+    </div>
+  );
+};
+
+const AdminBookingDetailsPage = () => {
+  const { bookingId } = useParams<{ bookingId: string }>();
+  const navigate = useNavigate();
+  const [booking, setBooking] = useState<Booking | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchBooking = async () => {
+      try {
+        if (!bookingId) return;
+
+        const { data, error } = await supabase
+          .from('bookings')
+          .select(`
+            *,
+            profiles:user_id (
+              email,
+              full_name,
+              role
+            )
+          `)
+          .eq('id', bookingId)
+          .single();
+
+        if (error) throw error;
+        if (!data) throw new Error('Booking not found');
+
+        setBooking(data);
+      } catch (error) {
+        console.error('Error fetching booking:', error);
+        toast.error('Failed to load booking details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBooking();
+  }, [bookingId]);
+
+  const updateBookingStatus = async (status: string) => {
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status })
+        .eq('id', bookingId);
+
+      if (error) throw error;
+
+      setBooking(booking => booking ? { ...booking, status } : null);
+      toast.success(`Booking ${status} successfully`);
+    } catch (error) {
+      console.error('Error updating booking:', error);
+      toast.error('Failed to update booking status');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!booking) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-2xl font-bold text-gray-900">Booking not found</h2>
+        <p className="mt-2 text-gray-600">The booking you're looking for doesn't exist.</p>
+        <button
+          onClick={() => navigate('/admin/bookings')}
+          className="mt-4 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+        >
+          <ArrowLeft className="h-5 w-5 mr-2" />
+          Back to Bookings
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white shadow rounded-lg overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-200">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Booking Details</h1>
+            <p className="mt-1 text-sm text-gray-500">Booking ID: {booking.id}</p>
+          </div>
+          <button
+            onClick={() => navigate('/admin/bookings')}
+            className="inline-flex items-center text-gray-600 hover:text-gray-900"
+          >
+            <ArrowLeft className="h-5 w-5 mr-2" />
+            Back to Bookings
+          </button>
+        </div>
+      </div>
+
+      <div className="px-6 py-4">
+        {/* Customer Information */}
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+          <h3 className="font-semibold text-gray-900 mb-3">Customer Information</h3>
+          <div className="space-y-2">
+            <div className="flex items-center text-gray-600">
+              <User className="w-5 h-5 mr-2" />
+              <span>{booking.profiles?.full_name}</span>
+            </div>
+            <div className="flex items-center text-gray-600">
+              <Mail className="w-5 h-5 mr-2" />
+              <span>{booking.profiles?.email}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Status and Actions */}
+        <div className="mb-6">
           <div className="flex items-center justify-between">
-            <div className="flex-1 flex justify-between sm:hidden">
-              <button className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                Previous
-              </button>
-              <button className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                Next
-              </button>
+            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(booking.status)}`}>
+              {booking.status === 'pending' && <AlertCircle className="h-4 w-4 mr-2" />}
+              {booking.status === 'confirmed' && <CheckCircle className="h-4 w-4 mr-2" />}
+              {booking.status === 'completed' && <CheckCircle className="h-4 w-4 mr-2" />}
+              {booking.status === 'cancelled' && <XCircle className="h-4 w-4 mr-2" />}
+              {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+            </span>
+            <div className="space-x-2">
+              {booking.status === 'pending' && (
+                <>
+                  <button
+                    onClick={() => updateBookingStatus('confirmed')}
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Confirm
+                  </button>
+                  <button
+                    onClick={() => updateBookingStatus('cancelled')}
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Cancel
+                  </button>
+                </>
+              )}
+              {booking.status === 'confirmed' && (
+                <button
+                  onClick={() => updateBookingStatus('completed')}
+                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Mark as Completed
+                </button>
+              )}
             </div>
-            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-gray-700">
-                  Showing <span className="font-medium">1</span> to <span className="font-medium">10</span> of{' '}
-                  <span className="font-medium">97</span> results
-                </p>
-              </div>
-              <div>
-                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                  <button className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                    <span className="sr-only">Previous</span>
-                    Previous
-                  </button>
-                  <button className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                    1
-                  </button>
-                  <button className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                    2
-                  </button>
-                  <button className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                    3
-                  </button>
-                  <button className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                    <span className="sr-only">Next</span>
-                    Next
-                  </button>
-                </nav>
-              </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Service Details */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-900">Service Information</h3>
+            
+            <div className="flex items-center text-gray-600">
+              <Home className="w-5 h-5 mr-2" />
+              <span className="capitalize">{booking.service_type}</span>
             </div>
+
+            <div className="flex items-center text-gray-600">
+              <Calendar className="w-5 h-5 mr-2" />
+              <span>{new Date(booking.scheduled_date).toLocaleDateString()}</span>
+            </div>
+
+            <div className="flex items-center text-gray-600">
+              <Clock className="w-5 h-5 mr-2" />
+              <span>{booking.scheduled_time}</span>
+            </div>
+
+            <div className="flex items-center text-gray-600">
+              <MapPin className="w-5 h-5 mr-2" />
+              <span>{booking.address}</span>
+            </div>
+
+            <div className="flex items-center text-gray-600">
+              <DollarSign className="w-5 h-5 mr-2" />
+              <span>${booking.amount}</span>
+            </div>
+          </div>
+
+          {/* Property Details */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-900">Property Details</h3>
+            
+            <div className="text-gray-600">
+              <p><strong>Bedrooms:</strong> {booking.bedrooms}</p>
+              <p><strong>Bathrooms:</strong> {booking.bathrooms}</p>
+              <p><strong>Square Footage:</strong> {booking.square_footage}</p>
+              <p><strong>ZIP Code:</strong> {booking.zip_code}</p>
+            </div>
+
+            {booking.extras && booking.extras.length > 0 && (
+              <div>
+                <h4 className="font-medium text-gray-900">Extra Services</h4>
+                <ul className="list-disc list-inside text-gray-600 mt-2">
+                  {booking.extras.map((extra, index) => (
+                    <li key={index} className="capitalize">{extra}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {booking.special_instructions && (
+              <div>
+                <h4 className="font-medium text-gray-900">Special Instructions</h4>
+                <p className="text-gray-600 mt-2">{booking.special_instructions}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -18,9 +18,13 @@ import {
   MessageSquare
 } from 'lucide-react';
 import BookingsPage from './dashboard/BookingsPage';
+import BookingDetailsPage from './dashboard/BookingDetailsPage';
 import PaymentsPage from './dashboard/PaymentsPage';
 import SettingsPage from './dashboard/SettingsPage';
 import PointsWidget from '../components/dashboard/PointsWidget';
+import { useAuth } from '../lib/auth';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 
 // Mock data for points and rewards
 const pointsData = {
@@ -53,6 +57,20 @@ const pointsData = {
 };
 
 const CustomerDashboard = () => {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate('/login');
+      toast.success('Logged out successfully');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Failed to logout');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="flex flex-col md:flex-row">
@@ -60,12 +78,20 @@ const CustomerDashboard = () => {
         <div className="w-full md:w-64 md:fixed md:top-0 md:bottom-0 md:left-0 bg-white border-r border-gray-200">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center">
-              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                <User className="w-6 h-6 text-blue-600" />
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
+                {user?.avatar_url ? (
+                  <img 
+                    src={user.avatar_url} 
+                    alt={user.full_name} 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <User className="w-6 h-6 text-blue-600" />
+                )}
               </div>
               <div className="ml-3">
-                <h3 className="font-semibold">John Smith</h3>
-                <p className="text-sm text-gray-500">john.smith@example.com</p>
+                <h3 className="font-semibold">{user?.full_name}</h3>
+                <p className="text-sm text-gray-500">{user?.email}</p>
               </div>
             </div>
           </div>
@@ -87,10 +113,13 @@ const CustomerDashboard = () => {
               <Settings className="w-5 h-5" />
               <span>Settings</span>
             </Link>
-            <Link to="/logout" className="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50">
+            <button 
+              onClick={handleLogout}
+              className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
               <LogOut className="w-5 h-5" />
               <span>Logout</span>
-            </Link>
+            </button>
           </nav>
         </div>
 
@@ -110,6 +139,7 @@ const CustomerDashboard = () => {
               </div>
             } />
             <Route path="/bookings" element={<BookingsPage />} />
+            <Route path="/bookings/:bookingId" element={<BookingDetailsPage />} />
             <Route path="/payments" element={<PaymentsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>

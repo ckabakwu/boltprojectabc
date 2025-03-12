@@ -68,36 +68,48 @@ class SessionService {
   }
 
   public async saveSession(session: any, userRole?: string): Promise<void> {
-    // Save session data
-    Cookies.set(SESSION_COOKIE, session.access_token, {
-      expires: 1, // 1 day
-      secure: true,
-      sameSite: 'Strict'
-    });
+    try {
+      // Add session expiry check
+      const expiresAt = new Date(session.expires_at);
+      if (expiresAt < new Date()) {
+        await this.clearSession();
+        throw new Error('Session expired');
+      }
 
-    if (session.refresh_token) {
-      Cookies.set(REFRESH_COOKIE, session.refresh_token, {
-        expires: 30, // 30 days
+      // Save session data with expiry
+      Cookies.set(SESSION_COOKIE, session.access_token, {
+        expires: new Date(session.expires_at),
         secure: true,
         sameSite: 'Strict'
       });
-    }
 
-    // Save user role if provided
-    if (userRole) {
-      Cookies.set(USER_ROLE_COOKIE, userRole, {
-        secure: true,
-        sameSite: 'Strict'
-      });
-    }
+      if (session.refresh_token) {
+        Cookies.set(REFRESH_COOKIE, session.refresh_token, {
+          expires: 30, // 30 days
+          secure: true,
+          sameSite: 'Strict'
+        });
+      }
 
-    // Track session in analytics
-    if (session.user) {
-      mixpanel.identify(session.user.id);
-      mixpanel.people.set({
-        $last_login: new Date().toISOString(),
-        role: userRole
-      });
+      // Save user role if provided
+      if (userRole) {
+        Cookies.set(USER_ROLE_COOKIE, userRole, {
+          secure: true,
+          sameSite: 'Strict'
+        });
+      }
+
+      // Track session in analytics
+      if (session.user) {
+        mixpanel.identify(session.user.id);
+        mixpanel.people.set({
+          $last_login: new Date().toISOString(),
+          role: userRole
+        });
+      }
+    } catch (error) {
+      console.error('Error saving session:', error);
+      throw error;
     }
   }
 

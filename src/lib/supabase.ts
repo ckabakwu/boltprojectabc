@@ -1,22 +1,30 @@
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '../types/supabase';
 
-// Get environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Validate required environment variables
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check your .env file.');
+  throw new Error('Missing Supabase environment variables');
 }
 
-// Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: false, // We'll handle session persistence ourselves
-    autoRefreshToken: true,
-    detectSessionInUrl: true
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Add a health check function
+export const checkSupabaseConnection = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('count')
+      .single();
+
+    if (error) throw error;
+    return { status: 'connected', error: null };
+  } catch (error) {
+    console.error('Supabase connection error:', error);
+    return { status: 'error', error: error.message };
   }
-});
+};
 
 // Type definitions for database tables
 export interface User {

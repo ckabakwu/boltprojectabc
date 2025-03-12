@@ -1,27 +1,47 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
+import toast from 'react-hot-toast';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { useAuth } from '../lib/auth';
 
 const LoginPage = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { signIn } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    rememberMe: false
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
-    
-    // Simulate API call
-    setTimeout(() => {
+
+    try {
+      await signIn(formData.email, formData.password, formData.rememberMe);
+      // Navigation is handled in the auth context
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Login failed';
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
       setIsLoading(false);
-      // For demo purposes, just redirect to dashboard
-      window.location.href = '/customer-dashboard';
-    }, 1500);
+    }
   };
 
   return (
@@ -39,14 +59,20 @@ const LoginPage = () => {
                 </Link>
               </div>
               
-              <h1 className="text-2xl font-bold mb-6 text-center">Log In to Your Account</h1>
+              <h1 className="text-2xl font-bold mb-6 text-center">Welcome Back</h1>
+
+              {location.state?.message && (
+                <div className="bg-blue-50 text-blue-600 p-3 rounded-lg mb-4">
+                  {location.state.message}
+                </div>
+              )}
               
               {error && (
                 <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4">
                   {error}
                 </div>
               )}
-              
+
               <form onSubmit={handleSubmit}>
                 <div className="mb-4">
                   <label htmlFor="email" className="block text-gray-700 mb-2 font-medium">
@@ -55,43 +81,69 @@ const LoginPage = () => {
                   <input
                     type="email"
                     id="email"
+                    name="email"
                     className="input-field"
                     placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={formData.email}
+                    onChange={handleInputChange}
                     required
+                    disabled={isLoading}
                   />
                 </div>
-                
+
                 <div className="mb-6">
-                  <div className="flex justify-between mb-2">
-                    <label htmlFor="password" className="block text-gray-700 font-medium">
-                      Password
-                    </label>
-                    <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-800">
-                      Forgot password?
-                    </Link>
-                  </div>
+                  <label htmlFor="password" className="block text-gray-700 mb-2 font-medium">
+                    Password
+                  </label>
                   <input
                     type="password"
                     id="password"
+                    name="password"
                     className="input-field"
                     placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={formData.password}
+                    onChange={handleInputChange}
                     required
+                    disabled={isLoading}
                   />
                 </div>
-                
-                <button 
-                  type="submit" 
-                  className="btn btn-primary w-full"
+
+                <div className="flex items-center justify-between mb-6">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="rememberMe"
+                      checked={formData.rememberMe}
+                      onChange={handleInputChange}
+                      className="mr-2"
+                      disabled={isLoading}
+                    />
+                    <span className="text-sm text-gray-600">Remember me</span>
+                  </label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn btn-primary w-full flex items-center justify-center"
                   disabled={isLoading}
                 >
-                  {isLoading ? 'Logging in...' : 'Log In'}
+                  {isLoading ? (
+                    <>
+                      <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Signing in...
+                    </>
+                  ) : (
+                    'Sign In'
+                  )}
                 </button>
               </form>
-              
+
               <div className="mt-6 text-center">
                 <p className="text-gray-600">
                   Don't have an account?{' '}
@@ -100,20 +152,11 @@ const LoginPage = () => {
                   </Link>
                 </p>
               </div>
-              
-              <div className="mt-8 pt-6 border-t border-gray-200 text-center">
-                <p className="text-gray-600 text-sm">
-                  Are you a cleaning professional?{' '}
-                  <Link to="/pro-signup" className="text-blue-600 hover:text-blue-800">
-                    Apply as a Pro
-                  </Link>
-                </p>
-              </div>
             </div>
           </div>
         </div>
       </div>
-      
+
       <Footer />
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -17,6 +17,9 @@ import {
   Grid
 } from 'lucide-react';
 import BookingCalendar from '../../components/dashboard/BookingCalendar';
+import { bookingService } from '../../lib/bookingService';
+import { useAuth } from '../../lib/auth';
+import toast from 'react-hot-toast';
 
 // Mock data for bookings
 const upcomingBookings = [
@@ -53,20 +56,66 @@ const pastBookings = [
 ];
 
 const BookingsPage = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('upcoming');
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const formatDate = (dateString: string) => {
-    const options: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString('en-US', options);
+  useEffect(() => {
+    fetchBookings();
+  }, [user, activeTab]);
+
+  const fetchBookings = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      const bookingsData = activeTab === 'upcoming' 
+        ? await bookingService.getUpcomingBookings(user.id)
+        : await bookingService.getUserBookings(user.id);
+      setBookings(bookingsData);
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+      toast.error('Failed to load bookings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelBooking = async (bookingId: string) => {
+    try {
+      await bookingService.cancelBooking(bookingId);
+      toast.success('Booking cancelled successfully');
+      fetchBookings();
+    } catch (error) {
+      console.error('Error cancelling booking:', error);
+      toast.error('Failed to cancel booking');
+    }
   };
 
   const handleDateSelect = (date: Date) => {
     console.log('Selected date:', date);
-    // Handle date selection - could filter bookings, etc.
+    // You can implement date-specific filtering here
+  };
+
+  // Filter bookings based on search term and status
+  const filteredBookings = bookings.filter(booking => {
+    const matchesSearch = searchTerm === '' || 
+      booking.service_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      booking.address.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus = selectedStatus === 'all' || booking.status === selectedStatus;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const formatDate = (dateString: string) => {
+    const options: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' };
+    return new Date(dateString).toLocaleDateString('en-US', options);
   };
 
   return (
@@ -178,7 +227,7 @@ const BookingsPage = () => {
       {/* View Toggle */}
       {viewMode === 'calendar' ? (
         <BookingCalendar 
-          bookings={[...upcomingBookings, ...pastBookings]}
+          bookings={filteredBookings}
           onDateSelect={handleDateSelect}
         />
       ) : (
@@ -212,32 +261,39 @@ const BookingsPage = () => {
           </div>
 
           {/* Bookings List */}
-          {activeTab === 'upcoming' ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            </div>
+          ) : (
             <div className="space-y-6">
-              {upcomingBookings.map((booking) => (
+              {filteredBookings.map((booking) => (
                 <motion.div
                   key={booking.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-white shadow rounded-lg overflow-hidden"
                 >
-                  {/* Booking card content */}
                   <div className="p-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
                       <div className="flex items-center mb-3 md:mb-0">
                         <CalendarIcon className="w-5 h-5 text-blue-600 mr-2" />
-                        <span className="font-semibold">{formatDate(booking.date)}</span>
+                        <span className="font-semibold">{formatDate(booking.scheduled_date)}</span>
                         <span className="mx-2 text-gray-400">|</span>
                         <Clock className="w-5 h-5 text-blue-600 mr-2" />
-                        <span>{booking.time}</span>
+                        <span>{booking.scheduled_time}</span>
                       </div>
-                      <div className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                        {booking.status === 'confirmed' ? 'Confirmed' : 'Pending'}
+                      <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium
+                        ${booking.status === 'confirmed' ? 'bg-green-100 text-green-800' : 
+                          booking.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'}`}
+                      >
+                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                       </div>
                     </div>
                     
                     <div className="mb-4">
-                      <h3 className="font-semibold text-lg">{booking.service}</h3>
+                      <h3 className="font-semibold text-lg">{booking.service_type}</h3>
                       <div className="flex items-center text-gray-600 mt-1">
                         <MapPin className="w-4 h-4 mr-1" />
                         <span>{booking.address}</span>
@@ -245,21 +301,6 @@ const BookingsPage = () => {
                     </div>
                     
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <img 
-                          src={booking.cleaner.image} 
-                          alt={booking.cleaner.name} 
-                          className="w-10 h-10 rounded-full mr-3"
-                        />
-                        <div>
-                          <p className="font-medium">{booking.cleaner.name}</p>
-                          <div className="flex items-center">
-                            <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                            <span className="text-sm ml-1">{booking.cleaner.rating}</span>
-                          </div>
-                        </div>
-                      </div>
-                      
                       <div className="flex space-x-3">
                         <Link
                           to={`/customer-dashboard/bookings/${booking.id}`}
@@ -268,78 +309,14 @@ const BookingsPage = () => {
                           View Details
                           <ChevronRight className="w-4 h-4 ml-1" />
                         </Link>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {pastBookings.map((booking) => (
-                <motion.div
-                  key={booking.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-white shadow rounded-lg overflow-hidden"
-                >
-                  {/* Past booking card content */}
-                  <div className="p-6">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
-                      <div className="flex items-center mb-3 md:mb-0">
-                        <CalendarIcon className="w-5 h-5 text-blue-600 mr-2" />
-                        <span className="font-semibold">{formatDate(booking.date)}</span>
-                        <span className="mx-2 text-gray-400">|</span>
-                        <Clock className="w-5 h-5 text-blue-600 mr-2" />
-                        <span>{booking.time}</span>
-                      </div>
-                      <div className="inline-block px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-medium">
-                        Completed
-                      </div>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <h3 className="font-semibold text-lg">{booking.service}</h3>
-                      <div className="flex items-center text-gray-600 mt-1">
-                        <MapPin className="w-4 h-4 mr-1" />
-                        <span>{booking.address}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <img 
-                          src={booking.cleaner.image} 
-                          alt={booking.cleaner.name} 
-                          className="w-10 h-10 rounded-full mr-3"
-                        />
-                        <div>
-                          <p className="font-medium">{booking.cleaner.name}</p>
-                          <div className="flex items-center">
-                            <div className="flex">
-                              {[...Array(5)].map((_, i) => (
-                                <Star 
-                                  key={i} 
-                                  className={`w-4 h-4 ${
-                                    i < booking.userRating 
-                                      ? 'text-yellow-400 fill-current' 
-                                      : 'text-gray-300'
-                                  }`} 
-                                />
-                              ))}
-                            </div>
-                            <span className="text-sm ml-1">Your rating</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex space-x-3">
-                        <Link
-                          to="/booking"
-                          className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                        >
-                          Book Again
-                        </Link>
+                        {booking.status === 'pending' && (
+                          <button
+                            onClick={() => handleCancelBooking(booking.id)}
+                            className="text-red-600 hover:text-red-800 font-medium text-sm"
+                          >
+                            Cancel
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -24,17 +24,16 @@ export const Tabs: React.FC<TabsProps> = ({ defaultValue, className = '', childr
   const [activeTab, setActiveTab] = React.useState(defaultValue);
 
   return (
-    <div className={className} data-active-tab={activeTab}>
-      {React.Children.map(children, child => {
-        if (React.isValidElement(child)) {
-          return React.cloneElement(child as React.ReactElement<any>, {
-            activeTab,
-            setActiveTab,
-          });
-        }
-        return child;
-      })}
-    </div>
+    <TabsContext.Provider value={{ activeTab, setActiveTab }}>
+      <div className={className} data-active-tab={activeTab}>
+        {React.Children.map(children, child => {
+          if (React.isValidElement(child)) {
+            return React.cloneElement(child as React.ReactElement<any>);
+          }
+          return child;
+        })}
+      </div>
+    </TabsContext.Provider>
   );
 };
 

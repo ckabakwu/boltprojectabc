@@ -3,7 +3,8 @@ import { z } from 'zod';
 // Form validation schemas
 export const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters')
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  rememberMe: z.boolean().optional()
 });
 
 export const registrationSchema = z.object({
@@ -15,10 +16,12 @@ export const registrationSchema = z.object({
     .min(8, 'Password must be at least 8 characters')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number')
-    .regex(/[!@#$%^&*]/, 'Password must contain at least one special character'),
-  confirmPassword: z.string()
-}).refine(data => data.password === data.confirmPassword, {
+    .regex(/[0-9]/, 'Password must contain at least one number'),
+  confirmPassword: z.string(),
+  agreeToTerms: z.literal(true, {
+    errorMap: () => ({ message: 'You must agree to the terms' })
+  })
+}).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"]
 });

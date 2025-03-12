@@ -19,26 +19,34 @@ interface TestResult {
 export const testSupabaseConnection = async (): Promise<TestResult> => {
   const start = Date.now();
   try {
-    // Test basic query
-    const { data, error } = await supabase.from('users').select('count').single();
+    // Test authentication
+    const authTest = await testAuth();
+    if (!authTest.success) throw new Error(authTest.error);
+
+    // Test database connection
+    const { data, error } = await supabase
+      .from('health_check')
+      .select('*')
+      .limit(1);
     if (error) throw error;
 
     // Test RLS policies
-    const { data: rlsTest, error: rlsError } = await supabase
-      .from('users')
-      .select('role')
-      .limit(1);
-    if (rlsError) throw rlsError;
+    const rlsTest = await testRLSPolicies();
+    if (!rlsTest.success) throw new Error(rlsTest.error);
 
     return {
-      name: 'Supabase',
+      name: 'Supabase Integration',
       status: 'success',
       responseTime: Date.now() - start,
-      version: 'v2.39.7' // From package.json
+      details: {
+        auth: authTest,
+        rls: rlsTest,
+        dbConnection: 'healthy'
+      }
     };
   } catch (error) {
     return {
-      name: 'Supabase',
+      name: 'Supabase Integration',
       status: 'error',
       error: error.message,
       responseTime: Date.now() - start
