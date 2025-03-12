@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './lib/auth';
 import ProtectedRoute from './components/ProtectedRoute';
 import HomePage from './pages/HomePage';
@@ -57,12 +57,12 @@ import { Toaster } from 'react-hot-toast';
 
 import SupabaseConnectionTest from './components/SupabaseConnectionTest';
 
-function App() {
+const App = () => {
   return (
     <div className="App">
       <Toaster position="top-center" reverseOrder={false} />
       <SupabaseConnectionTest />
-      <Router>
+      <BrowserRouter>
         <AuthProvider>
           <Routes>
             {/* Public Routes */}
@@ -146,12 +146,12 @@ function App() {
             </Route>
 
             {/* 404 Route */}
-            <Route path="*" element={<NotFoundPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>
-      </Router>
+      </BrowserRouter>
     </div>
   );
-}
+};
 
 export default App;
