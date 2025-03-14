@@ -68,63 +68,95 @@ const ProSignupPage = () => {
 
         if (error) throw error;
 
-        // Check if user is a pro
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('role, approved')
-          .eq('id', data.user.id)
+        // Check if user is a provider
+        const { data: providerData, error: providerError } = await supabase
+          .from('service_providers')
+          .select('status')
+          .eq('user_id', data.user.id)
           .single();
 
-        if (profileError) throw profileError;
-
-        if (profileData.role !== 'pro') {
+        if (providerError) {
           throw new Error('This account is not registered as a professional cleaner');
         }
 
-        // Check if pro is approved
-        if (!profileData.approved) {
-          toast.success('Login successful. Your application is pending review.');
+        // Check provider status
+        if (providerData.status === 'pending') {
+          toast.info('Your application is still pending review.');
           navigate('/pro-application/status');
           return;
+        } else if (providerData.status === 'rejected') {
+          throw new Error('Your application has been rejected. Please contact support.');
+        } else if (providerData.status === 'suspended') {
+          throw new Error('Your account has been suspended. Please contact support.');
         }
 
         toast.success('Login successful!');
         navigate('/pro-dashboard');
       } else {
+        // First check if email already exists in auth
+        const { data: existingUser, error: checkError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', email)
+          .maybeSingle(); // Use maybeSingle() instead of single()
+
+        if (checkError && !checkError.message.includes('JSON object requested')) {
+          throw checkError;
+        }
+
+        if (existingUser) {
+          throw new Error('User with this email already exists');
+        }
+
         // Handle pro signup
-        const { data, error } = await supabase.auth.signUp({
+        const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
           options: {
+            emailRedirectTo: `${window.location.origin}/pro-application`,
             data: {
-              role: 'pro',
               full_name: `${firstName} ${lastName}`,
+              role: 'provider',
               phone,
+              zip_code: zipCode,
+              experience
             }
           }
         });
 
-        if (error) throw error;
+        if (signUpError) {
+          console.error('Signup error:', signUpError);
+          throw signUpError;
+        }
 
-        // Create profile for pro
-        const { error: profileError } = await supabase
-          .from('profiles')
+        if (!data.user) {
+          throw new Error('No user data returned');
+        }
+
+        // Wait a moment for the auth user to be fully created
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Create service provider entry
+        const { error: providerError } = await supabase
+          .from('service_providers')
           .insert([
             {
-              id: data.user?.id,
-              full_name: `${firstName} ${lastName}`,
-              email,
-              phone,
-              zip_code: zipCode,
-              role: 'pro',
-              approved: false,
-              experience,
+              user_id: data.user.id,
+              status: 'pending',
+              available: true,
+              experience: experience,
+              zip_code: zipCode
             }
-          ]);
+          ])
+          .select()
+          .single();
 
-        if (profileError) throw profileError;
+        if (providerError) {
+          console.error('Provider creation error:', providerError);
+          throw providerError;
+        }
 
-        // Navigate to pro application with form data
+        // Navigate to pro application
         navigate('/pro-application', {
           state: {
             formData: {
@@ -134,7 +166,7 @@ const ProSignupPage = () => {
               phone,
               zipCode,
               experience,
-              userId: data.user?.id
+              userId: data.user.id
             }
           }
         });
@@ -142,9 +174,24 @@ const ProSignupPage = () => {
         toast.success('Account created! Please complete your application.');
       }
     } catch (err: any) {
-      console.error('Error:', err);
-      setError(err.message || 'An error occurred. Please try again.');
-      toast.error(err.message || 'An error occurred');
+      console.error('Login/Signup Error:', err);
+      let errorMessage = err.message;
+      
+      // Handle specific error cases
+      if (err.message.includes('Invalid login credentials')) {
+        errorMessage = 'Invalid email or password';
+      } else if (err.message.includes('not registered as a professional')) {
+        errorMessage = 'This account is not registered as a professional cleaner';
+      } else if (err.message.includes('duplicate key')) {
+        errorMessage = 'An account with this email already exists';
+      } else if (err.message.includes('password')) {
+        errorMessage = 'Password must be at least 6 characters long and contain at least one number';
+      } else if (err.message.includes('Database error')) {
+        errorMessage = 'Unable to create account. Please try again later.';
+      }
+      
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }

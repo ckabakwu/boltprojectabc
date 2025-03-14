@@ -10,7 +10,7 @@ interface User {
   role: 'admin' | 'provider' | 'customer';
   full_name: string;
   avatar_url?: string;
-  status: string;
+  status: 'active' | 'inactive' | 'pending' | 'suspended';
 }
 
 interface AuthState {
